@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <p>ajax+FormData 实现文件无刷新上传</p>
+    选择文件:<input type="file" name="f1" id="file" multiple/><br/>
+    标题：<input type="text" name="title" id="title" /><br/>
+    <button type="button" id="btn-submit">上 传</button>
+ <script>
+    submitUpload = () => {
+        const files =  document.getElementById('file').files;
+        const fd = new FormData();
+
+        fd.append('title', document.getElementById('title').value);
+        for(var i =0;i<files.length;i++){
+            fd.append('f1', files[i]);//支持多文件上传
+        }
+
+        var xhr = new XMLHttpRequest();   //创建对象
+        xhr.open('POST', 'http://lixuemeng01.baijiahao.baidu.com:8100/upload');
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                console.log(xhr.response)
+            }
+        }
+
+        xhr.upload.onprogress = ({ loaded, total, lengthComputable }) => {
+            console.log(loaded, total, lengthComputable);
+        }
+        xhr.send(fd);//发送时  Content-Type默认就是: multipart/form-data;
+     }
+     document.getElementById('btn-submit').addEventListener('click',submitUpload);
+
+ </script>
+</body>
+</html>

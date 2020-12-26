@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <p>大文件上传</p>
+    选择文件:<input type="file" name="f1" id="file" multiple/><br/>
+    标题：<input type="text" name="title" id="title" /><br/>
+    <button type="button" id="btn-submit">上 传</button>
+<script src="//cdn.bootcss.com/axios/0.19.0-beta.1/axios.js"></script>
+ <script>
+    // 文件切片
+    createFileChunk = (file) => {
+        const ret = []
+        const blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice
+        const chunkSize = 1024 * 1024;
+        const chunks = Math.ceil(file.size / chunkSize)
+        let currentChunk = 0
+        let start = 0
+        let end = 0
+
+        while (currentChunk < chunks) {
+            start = currentChunk * chunkSize
+            end = ((start + chunkSize) >= file.size) ? file.size : start + chunkSize
+            ret.push(blobSlice.call(file, start, end))
+            currentChunk++
+        }
+
+        return ret
+
+    }
+    chunkCheck = (md5, id) => {
+        let data = {
+            md5,
+            id
+        }
+        return axios.get(`http://lixuemeng01.baijiahao.baidu.com:8100/upload/chunkCheck`,{params: data}).then(data => data.data)
+    
+    }
+    fileCheck = (md5) => {
+        let data = {
+            md5
+        }
+        return axios.get(`http://lixuemeng01.baijiahao.baidu.com:8100/upload/fileCheck`,{params: data}).then(data => data.data)
+    }
+    uploadChunk = async (chunks, md5) => {
+        let promiseList = [];
+        console.log('chunks',chunks.length);
+        for (let i=0; i< chunks.length; i++) {
+            console.log('i',i);
+            let promise = new Promise((resolve, reject) => {
+                const handleChunk = async () => {
+                    // 断点续传 判断当前切片是否上传
+                    const {errno,isAlready} = await chunkCheck(md5, i);
+                    console.log(errno,isAlready);
+                    if (isAlready) {
+                        return resolve();
+                    }
+                    const fd = new FormData()
+                    fd.append('chunk', chunks[i]);
+                    console.log('chunks[i]',chunks[i]);
+                    fd.append('hash', md5);
+                    fd.append('id', i);
+                    axios.post('http://lixuemeng01.baijiahao.baidu.com:8100/upload/uploadChunk', fd).then(({data:{errno},status}) => {
+                        if (status === 200 && +errno === 0) {
+                            resolve();
+                        }
+                        else {
+                            reject();
+                        }
+                    })
+                }
+                handleChunk();
+            });
+            promiseList.push(promise);
+        }
+        // 并发切片上传
+		await Promise.all(promiseList);
+        
+    };
+    mergeChunk = (fname, md5) => {
+        const fd = new FormData()
+        fd.append('name', fname);
+        fd.append('hash', md5);
+        axios.post('http://lixuemeng01.baijiahao.baidu.com:8100/upload/mergeChunk', fd).then((res) => {
+            console.log('res',res);
+        })
+    }
+    upload = async (file) => {
+        // 先用文件名模拟md5
+        const md5 = file.name;
+        // 判断文件是否已经上传 实现秒传
+        // const {errno, data} = await fileCheck(md5);
+        // if (errno === 0 && data) {
+        //     console.log('data',data);
+        //     return;
+        // }
+        const chunks = createFileChunk(file);
+        try {
+            // 切片上传
+            await uploadChunk(chunks,md5); 
+            // 可以先预览视频 URL.createObjectURL 可以用于在浏览器上预览本地图片或者视频
+             // console.log(URL.createObjectURL(file));
+            // 切片合并
+            mergeChunk(file.name, md5);
+        }
+        catch(e) {
+            console.log(e);
+        }
+    }
+    submitUpload = () => {
+        const files =  document.getElementById('file').files;
+        upload(files[0]);
+    }
+    
+    document.getElementById('btn-submit').addEventListener('click',submitUpload);
+
+ </script>
+</body>
+</html>
